@@ -3,7 +3,7 @@ import { setupDraggableUsers } from "./modules/drag.js";
 import { setupCentroid, notifyCentroidTargets, getCurrentActivatedGenreName, setGenreChangeListener } from "./modules/centroid.js";
 import { renderLabels } from "./modules/labels.js";
 import { renderRing } from "./modules/ring.js";
-import { renderHighlights } from "./modules/highlights.js";
+import { renderHighlights, updateHighlights } from "./modules/highlights.js";
 import { ParticleSystem } from "./modules/particles.js";
 import { setupSidebarMenu } from "./modules/sidebar.js";
 import { getUsers } from "./core/state.js";
@@ -107,10 +107,11 @@ async function init() {
 			}));
 
 		particleSystem.updatePullEmitters(usersForPullEffect);
-		
+		updateHighlights();
+
 		requestAnimationFrame(updateAmbientParticles);
 	}
-	
+
 	updateAmbientParticles();
 }
 

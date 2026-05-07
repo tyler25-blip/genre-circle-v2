@@ -208,25 +208,59 @@ export function renderHighlights(highlightsGroup) {
 	});
 }
 
+const APPROACH_FADE_DISTANCE = 280; // px outside ring where fade-in starts
+
+function getSuperGenreIdxForAngleDeg(deg) {
+	const offsetDeg = (((deg + 90) % 360) + 360) % 360;
+	const segmentCount = ringLabels.length;
+	return Math.floor(offsetDeg / (360 / segmentCount)) % segmentCount;
+}
+
 export function updateHighlights() {
 	const users = getUsers();
 	const superGenres = getSuperGenres();
 	const groups = document.querySelectorAll(".supergenre-highlight-group");
-	const defs = document.getElementById("ring-defs");
-	const segmentAngle = 360 / ringLabels.length;
+
+	// Compute per-super-genre approach intensity from outside users
+	const previewState = ringLabels.map(() => ({ user: null, intensity: 0 }));
+	users.forEach((u) => {
+		if (u.inGenreRing) return;
+		const dx = u.x - RING_CENTER.x;
+		const dy = u.y - RING_CENTER.y;
+		const distFromCenter = Math.hypot(dx, dy);
+		if (distFromCenter <= RING_OUTER_EDGE) return;
+		const distOutside = distFromCenter - RING_OUTER_EDGE;
+		if (distOutside > APPROACH_FADE_DISTANCE) return;
+		const angleDeg = (Math.atan2(dy, dx) * 180) / Math.PI;
+		const sgIdx = getSuperGenreIdxForAngleDeg(angleDeg);
+		const intensity = 1 - distOutside / APPROACH_FADE_DISTANCE;
+		const eased = intensity * intensity; // ease-in feel
+		if (eased > previewState[sgIdx].intensity) {
+			previewState[sgIdx].user = u;
+			previewState[sgIdx].intensity = eased;
+		}
+	});
 
 	groups.forEach((group) => {
 		const idx = Number(group.getAttribute("data-supergenre-id"));
 		const sg = superGenres[idx];
+		const preview = previewState[idx];
 
+		let user = null;
+		let opacity = 0;
 		if (sg && sg.active && sg.activeUserId !== null) {
-			const user = users[sg.activeUserId];
-			if (!user) return;
+			user = users[sg.activeUserId] || null;
+			opacity = 1;
+		} else if (preview.user && preview.intensity > 0) {
+			user = preview.user;
+			opacity = preview.intensity;
+		}
 
-			const sector = group.querySelector(".supergenre-sector");
-			const beam = group.querySelector(".supergenre-beam");
-			const rails = group.querySelectorAll(".supergenre-beam-rail");
+		const sector = group.querySelector(".supergenre-sector");
+		const beam = group.querySelector(".supergenre-beam");
+		const rails = group.querySelectorAll(".supergenre-beam-rail");
 
+		if (user) {
 			if (sector) {
 				sector.setAttribute("fill", user.color);
 				sector.setAttribute("fill-opacity", "0.92");
@@ -239,13 +273,9 @@ export function updateHighlights() {
 				rail.setAttribute("stroke", user.color);
 				rail.setAttribute("stroke-opacity", "0.7");
 			});
-
-			group.setAttribute("opacity", "1");
+			group.setAttribute("opacity", String(opacity));
 		} else {
 			group.setAttribute("opacity", "0");
-			const sector = group.querySelector(".supergenre-sector");
-			const beam = group.querySelector(".supergenre-beam");
-			const rails = group.querySelectorAll(".supergenre-beam-rail");
 			if (sector) sector.setAttribute("fill", "transparent");
 			if (beam) beam.setAttribute("fill", "transparent");
 			rails.forEach((rail) => rail.setAttribute("stroke", "transparent"));
