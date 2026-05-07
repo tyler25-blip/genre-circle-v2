@@ -1,0 +1,26 @@
+@media (max-width: 700px) {
+	.stage {
+		width: min(96vw, 640px);
+	}
+
+	.ring-text {
+		font-size: 12px;
+		letter-spacing: 0.75px;
+	}
+
+	/* Sidebar responsive adjustments */
+	.sidebar-menu {
+		width: 100%;
+		max-width: 280px;
+	}
+
+	.sidebar-content {
+		padding: 16px;
+		gap: 16px;
+	}
+
+	.sidebar-toggle {
+		right: 12px;
+		top: 12px;
+	}
+}

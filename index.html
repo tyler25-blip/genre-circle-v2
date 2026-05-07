@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="de">
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<title>Genre Atlas V2</title>
+		<link rel="stylesheet" href="assets/css/variables.css" />
+		<link rel="stylesheet" href="assets/css/base.css" />
+		<link rel="stylesheet" href="assets/css/layout.css" />
+		<link rel="stylesheet" href="assets/css/components.css" />
+		<link rel="stylesheet" href="assets/css/animations.css" />
+		<link rel="stylesheet" href="assets/css/responsive.css" />
+	</head>
+	<body>
+		<main class="stage" aria-label="Genre Ring Bühne">
+			<div id="musicbrainz-status" class="musicbrainz-status" role="status" aria-live="polite" hidden></div>
+			<svg
+				id="genre-ring"
+				class="genre-ring"
+				viewBox="0 0 1600 1600"
+				role="img"
+				aria-labelledby="ring-title"
+			>
+				<title id="ring-title">Musik-Genre-Ring</title>
+				<defs id="ring-defs"></defs>
+				<g id="ring-base"></g>
+				<g id="genre-trees" class="genre-trees"></g>
+				<g id="ring-highlights"></g>
+				<g id="ring-labels"></g>
+				<g id="particles"></g>
+				<g id="centroid"></g>
+				<g id="draggable-dots"></g>
+			</svg>
+		</main>
+
+		<!-- Sidebar Toggle Button -->
+		<button id="sidebar-toggle" class="sidebar-toggle" aria-label="Sidebar ein-/ausblenden" aria-controls="sidebar-menu">
+			<span class="toggle-icon">☰</span>
+		</button>
+
+		<!-- Mode Switch Buttons -->
+		<div class="mode-switch">
+			<button id="mode-map-btn" class="mode-btn is-active" type="button">Map</button>
+			<button id="mode-rhythm-btn" class="mode-btn" type="button">Rhythm</button>
+			<button id="music-toggle-btn" class="mode-btn music-btn" type="button" aria-label="Toggle music">♪</button>
+		</div>
+
+		<!-- Unified Sidebar Menu -->
+		<aside id="sidebar-menu" class="sidebar-menu" aria-label="Einstellungen und Debug">
+			<div class="sidebar-content">
+				<!-- Co-Occurrence Section -->
+				<section class="sidebar-section">
+					<h3 class="sidebar-section-title">Debug: Co-Occurrence</h3>
+					<p class="sidebar-help">Input kommt vom aktivierten Genre im Ring.</p>
+					<div class="debug-row">
+						<label for="debug-entity">Entity</label>
+						<select id="debug-entity" class="debug-input">
+							<option value="artist">artist</option>
+							<option value="release" selected>release</option>
+							<option value="recording">recording</option>
+						</select>
+					</div>
+					<div class="debug-row">
+						<label for="debug-max">Samples</label>
+						<input id="debug-max" class="debug-input" type="number" min="10" max="2000" value="100" />
+					</div>
+					<div class="debug-row">
+						<label for="debug-topn">Top N</label>
+						<input id="debug-topn" class="debug-input" type="number" min="1" max="40" value="6" />
+					</div>
+					<button id="debug-run" class="debug-run">Run</button>
+					<div id="debug-results" class="debug-results" aria-live="polite">
+						<p class="muted">Aktiviere ein Genre mit einem Dot. Gezeigt werden Top-N Tags; größere Dots bedeuten höhere Co-Occurrence.</p>
+					</div>
+				</section>
+
+				<!-- Map Display Settings Section -->
+				<section class="sidebar-section">
+					<h3 class="sidebar-section-title">Map Display Settings</h3>
+					<div class="debug-row">
+						<label for="map-genre-dot-label-visibility">Genre Dot Labels</label>
+						<select id="map-genre-dot-label-visibility" class="debug-input">
+							<option value="all">All genre-dot labels visible</option>
+							<option value="selected" selected>Only selected genre-dot label visible</option>
+						</select>
+					</div>
+					<div class="debug-row">
+						<label for="map-generation-iterations">Map Generation Iterations</label>
+						<input id="map-generation-iterations" class="debug-input" type="number" min="1" max="20" step="1" value="1" />
+					</div>
+					<div class="debug-row">
+						<label for="map-radius-scaling">Dot Size By</label>
+						<select id="map-radius-scaling" class="debug-input">
+							<option value="connections" selected>Connections</option>
+							<option value="count">Count</option>
+							<option value="entity_share">Entity Share</option>
+							<option value="tag_share">Tag Share</option>
+							<option value="equal">Equal Size</option>
+						</select>
+					</div>
+					<div class="debug-row">
+						<label for="map-collision-gap">Collision Gap (px)</label>
+						<input id="map-collision-gap" class="debug-input" type="number" min="0" max="100" step="5" value="65" />
+					</div>
+				</section>
+			</div>
+		</aside>
+
+
+		<script type="module" src="assets/js/app.js"></script>
+	</body>
+</html>
