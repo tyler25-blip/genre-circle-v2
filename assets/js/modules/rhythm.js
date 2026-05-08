@@ -173,7 +173,7 @@ function animate() {
 		line.setAttribute("y1", String(y1));
 		line.setAttribute("x2", String(x2));
 		line.setAttribute("y2", String(y2));
-		line.setAttribute("stroke", lineColor);
+		line.style.stroke = lineColor;
 	}
 
 	rafId = requestAnimationFrame(animate);
