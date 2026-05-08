@@ -16,9 +16,30 @@ const BEAT_PERIOD = 60 / BPM;
 const lineOffsets = Array.from({ length: LINE_COUNT }, () => Math.random() * Math.PI * 2);
 const lineFreqs = Array.from({ length: LINE_COUNT }, () => 0.7 + Math.random() * 1.4);
 
+const NEON_COLORS = [
+	[57, 255, 20],   // green  #39ff14
+	[0, 212, 255],   // blue   #00d4ff
+	[250, 255, 0],   // yellow #faff00
+	[255, 7, 58],    // red    #ff073a
+];
+const COLOR_HOLD_SECONDS = 10;
+
 function pseudoRandom(seed) {
 	const x = Math.sin(seed * 12.9898) * 43758.5453;
 	return x - Math.floor(x);
+}
+
+function getCurrentLineColor(t) {
+	const total = NEON_COLORS.length * COLOR_HOLD_SECONDS;
+	const phase = ((t % total) + total) % total;
+	const idx = Math.floor(phase / COLOR_HOLD_SECONDS);
+	const local = (phase % COLOR_HOLD_SECONDS) / COLOR_HOLD_SECONDS;
+	const a = NEON_COLORS[idx];
+	const b = NEON_COLORS[(idx + 1) % NEON_COLORS.length];
+	const r = Math.round(a[0] * (1 - local) + b[0] * local);
+	const g = Math.round(a[1] * (1 - local) + b[1] * local);
+	const bl = Math.round(a[2] * (1 - local) + b[2] * local);
+	return `rgb(${r},${g},${bl})`;
 }
 
 let rhythmLayer = null;
@@ -130,6 +151,8 @@ function animate() {
 	const beatIndex = Math.floor(t / BEAT_PERIOD);
 	const beatStrength = 0.65 + 0.7 * pseudoRandom(beatIndex);
 
+	const lineColor = getCurrentLineColor(t);
+
 	for (let i = 0; i < lineNodes.length; i++) {
 		const angleRad = (i / LINE_COUNT) * Math.PI * 2 - Math.PI / 2;
 		const noise =
@@ -150,6 +173,7 @@ function animate() {
 		line.setAttribute("y1", String(y1));
 		line.setAttribute("x2", String(x2));
 		line.setAttribute("y2", String(y2));
+		line.setAttribute("stroke", lineColor);
 	}
 
 	rafId = requestAnimationFrame(animate);

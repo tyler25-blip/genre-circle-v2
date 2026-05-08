@@ -25,6 +25,7 @@ let currentActiveUserId = null;
 let centroidToGenreDotLine = null;
 let currentActivatedGenreDot = null; // { el, originalFill }
 const centroidSettings = { lineColor: "#ffffff", lineWidth: 2.5 };
+const SELECTED_DOT_FILL = "#39ff14";
 
 let genreChangeListener = null;
 let lastReportedGenreName = null;
@@ -198,15 +199,14 @@ function loop(ts) {
 			centroidToGenreDotLine.setAttribute("stroke", centroidSettings.lineColor);
 			centroidToGenreDotLine.setAttribute("stroke-width", String(centroidSettings.lineWidth));
 
-			// Highlight the connected dot by using its stroke color as fill
+			// Highlight the connected dot with the neon-green selected color
 			if (currentActivatedGenreDot?.el !== nearestGenreDot.el) {
 				_restoreGenreDotFill();
-				const strokeColor = nearestGenreDot.el.getAttribute('stroke') || '#ffffff';
 				const originalFill = nearestGenreDot.el.getAttribute('fill') || '';
 				const originalRadius = Number(nearestGenreDot.el.getAttribute('r')) || 8;
 				currentActivatedGenreDot = { el: nearestGenreDot.el, originalFill, originalRadius };
-				nearestGenreDot.el.setAttribute('fill', strokeColor);
-				nearestGenreDot.el.style.fill = strokeColor;
+				nearestGenreDot.el.setAttribute('fill', SELECTED_DOT_FILL);
+				nearestGenreDot.el.style.fill = SELECTED_DOT_FILL;
 				// increase radius by 15px temporarily
 				nearestGenreDot.el.setAttribute('r', String(originalRadius + 15));
 			}
