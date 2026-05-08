@@ -318,9 +318,9 @@
 
 .rhythm-line {
 	stroke: #ffffff;
-	stroke-width: 6;
+	stroke-width: 3;
 	stroke-linecap: round;
-	opacity: 0.85;
+	opacity: 0.95;
 }
 
 .mode-switch {

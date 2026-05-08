@@ -42,6 +42,50 @@ function getCurrentLineColor(t) {
 	return `rgb(${r},${g},${bl})`;
 }
 
+function ensureRhythmGlowFilter() {
+	const defs = document.getElementById("ring-defs");
+	if (!defs) return;
+	if (defs.querySelector("#rhythm-glow")) return;
+
+	const filter = createSvgElement("filter");
+	filter.setAttribute("id", "rhythm-glow");
+	filter.setAttribute("x", "-30%");
+	filter.setAttribute("y", "-30%");
+	filter.setAttribute("width", "160%");
+	filter.setAttribute("height", "160%");
+
+	const blur = createSvgElement("feGaussianBlur");
+	blur.setAttribute("in", "SourceAlpha");
+	blur.setAttribute("stdDeviation", "6");
+	blur.setAttribute("result", "blur");
+	filter.appendChild(blur);
+
+	const flood = createSvgElement("feFlood");
+	flood.setAttribute("id", "rhythm-glow-flood");
+	flood.setAttribute("flood-color", "#39ff14");
+	flood.setAttribute("flood-opacity", "0.7");
+	flood.setAttribute("result", "flood");
+	filter.appendChild(flood);
+
+	const composite = createSvgElement("feComposite");
+	composite.setAttribute("in", "flood");
+	composite.setAttribute("in2", "blur");
+	composite.setAttribute("operator", "in");
+	composite.setAttribute("result", "coloredBlur");
+	filter.appendChild(composite);
+
+	const merge = createSvgElement("feMerge");
+	const m1 = createSvgElement("feMergeNode");
+	m1.setAttribute("in", "coloredBlur");
+	const m2 = createSvgElement("feMergeNode");
+	m2.setAttribute("in", "SourceGraphic");
+	merge.appendChild(m1);
+	merge.appendChild(m2);
+	filter.appendChild(merge);
+
+	defs.appendChild(filter);
+}
+
 let rhythmLayer = null;
 let charNodes = [];
 let lineNodes = [];
@@ -110,12 +154,18 @@ function rebuildContents() {
 		charNodes.push(node);
 	}
 
-	// Build 64 radial lines pointing inward from inside the ring
+	// Wrap all lines in a sub-group with the colored glow filter
+	ensureRhythmGlowFilter();
+	const linesSubGroup = createSvgElement("g");
+	linesSubGroup.setAttribute("class", "rhythm-lines-group");
+	linesSubGroup.setAttribute("filter", "url(#rhythm-glow)");
+	rhythmLayer.appendChild(linesSubGroup);
+
 	for (let i = 0; i < LINE_COUNT; i++) {
 		const line = createSvgElement("line");
 		line.setAttribute("class", "rhythm-line");
 		line.setAttribute("stroke-linecap", "round");
-		rhythmLayer.appendChild(line);
+		linesSubGroup.appendChild(line);
 		lineNodes.push(line);
 	}
 }
@@ -152,6 +202,8 @@ function animate() {
 	const beatStrength = 0.65 + 0.7 * pseudoRandom(beatIndex);
 
 	const lineColor = getCurrentLineColor(t);
+	const flood = document.getElementById("rhythm-glow-flood");
+	if (flood) flood.setAttribute("flood-color", lineColor);
 
 	for (let i = 0; i < lineNodes.length; i++) {
 		const angleRad = (i / LINE_COUNT) * Math.PI * 2 - Math.PI / 2;
@@ -173,7 +225,6 @@ function animate() {
 		line.setAttribute("y1", String(y1));
 		line.setAttribute("x2", String(x2));
 		line.setAttribute("y2", String(y2));
-		line.style.stroke = lineColor;
 	}
 
 	rafId = requestAnimationFrame(animate);
