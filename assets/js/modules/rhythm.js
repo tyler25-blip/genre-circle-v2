@@ -49,14 +49,14 @@ function ensureRhythmGlowFilter() {
 
 	const filter = createSvgElement("filter");
 	filter.setAttribute("id", "rhythm-glow");
-	filter.setAttribute("x", "-30%");
-	filter.setAttribute("y", "-30%");
-	filter.setAttribute("width", "160%");
-	filter.setAttribute("height", "160%");
+	filter.setAttribute("x", "-50%");
+	filter.setAttribute("y", "-50%");
+	filter.setAttribute("width", "200%");
+	filter.setAttribute("height", "200%");
 
 	const blur = createSvgElement("feGaussianBlur");
 	blur.setAttribute("in", "SourceAlpha");
-	blur.setAttribute("stdDeviation", "6");
+	blur.setAttribute("stdDeviation", "20");
 	blur.setAttribute("result", "blur");
 	filter.appendChild(blur);
 
