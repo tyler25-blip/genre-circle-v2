@@ -1,5 +1,6 @@
 import { RING_CENTER, RING_RADIUS } from "../config/constants.js";
 import { createSvgElement } from "../core/svg.js";
+import { setTrackChangeListener, getCurrentTrack } from "./audioPlayer.js";
 
 const RING_INNER_EDGE = RING_RADIUS - 28;
 const TEXT_RADIUS = RING_INNER_EDGE - 16;
@@ -104,10 +105,19 @@ let rhythmLayer = null;
 let charNodes = [];
 let lineNodes = [];
 let currentGenreName = "";
+let currentTrackInfo = null;
 let active = false;
 let rotation = 0;
 let startTime = 0;
 let rafId = null;
+
+function buildLabelText() {
+	const parts = [];
+	if (currentGenreName) parts.push(currentGenreName);
+	if (currentTrackInfo?.name) parts.push(currentTrackInfo.name);
+	if (currentTrackInfo?.artist) parts.push(currentTrackInfo.artist);
+	return parts.join(" · ");
+}
 
 export function setupRhythmMode(svg) {
 	if (rhythmLayer) return;
@@ -115,12 +125,19 @@ export function setupRhythmMode(svg) {
 	rhythmLayer.setAttribute("id", "rhythm-mode");
 	rhythmLayer.setAttribute("visibility", "hidden");
 	svg.appendChild(rhythmLayer);
+
+	setTrackChangeListener((info) => {
+		currentTrackInfo = info;
+		if (active) rebuildContents();
+	});
+	currentTrackInfo = getCurrentTrack();
 }
 
 export function showRhythmMode(genreName) {
 	if (!rhythmLayer) return;
 	active = true;
 	currentGenreName = String(genreName || "").trim();
+	currentTrackInfo = getCurrentTrack();
 	rotation = 0;
 	startTime = performance.now();
 	rebuildContents();
@@ -148,10 +165,11 @@ function rebuildContents() {
 	charNodes = [];
 	lineNodes = [];
 
-	if (!currentGenreName) return;
+	const labelText = buildLabelText();
+	if (!labelText) return;
 
 	// Build curved text repeated around the inner ring edge
-	const unit = currentGenreName + SEPARATOR;
+	const unit = labelText + SEPARATOR;
 	const charWidth = TEXT_FONT_SIZE * CHAR_WIDTH_FACTOR;
 	const circumference = 2 * Math.PI * TEXT_RADIUS;
 	const unitArc = unit.length * charWidth;

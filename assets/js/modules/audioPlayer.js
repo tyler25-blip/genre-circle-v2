@@ -1,6 +1,7 @@
 const ITUNES_SEARCH_URL = "https://itunes.apple.com/search";
 const FADE_DURATION_MS = 700;
 const VOLUME = 0.7;
+const MAX_PLAY_RETRIES = 3;
 
 const trackCache = new Map();
 let audioA = null;
@@ -13,6 +14,11 @@ let pendingGenre = null;
 let currentTrackList = null;
 let currentTrackIndex = 0;
 let pendingToken = 0;
+let crossfadeRafId = null;
+let playRetryCount = 0;
+
+let currentTrackInfo = null;
+let trackChangeListener = null;
 
 export function setupAudioPlayer() {
 	if (audioA) return;
@@ -41,18 +47,36 @@ export function setEnabled(value) {
 	if (!enabled) {
 		fadeAudioOut(activeAudio);
 		fadeAudioOut(inactiveAudio);
+		setCurrentTrackInfo(null);
 	} else if (pendingGenre) {
 		const g = pendingGenre;
 		pendingGenre = null;
-		const stale = currentGenre;
 		currentGenre = null;
 		playGenre(g);
-		if (currentGenre === null) currentGenre = stale;
 	}
 }
 
 export function isEnabled() {
 	return enabled;
+}
+
+export function setTrackChangeListener(fn) {
+	trackChangeListener = typeof fn === "function" ? fn : null;
+}
+
+export function getCurrentTrack() {
+	return currentTrackInfo;
+}
+
+function setCurrentTrackInfo(info) {
+	if (!info && !currentTrackInfo) return;
+	if (info && currentTrackInfo &&
+		info.name === currentTrackInfo.name &&
+		info.artist === currentTrackInfo.artist) return;
+	currentTrackInfo = info;
+	if (trackChangeListener) {
+		try { trackChangeListener(currentTrackInfo); } catch (e) { console.warn("trackChangeListener error:", e); }
+	}
 }
 
 export async function playGenre(name) {
@@ -63,6 +87,7 @@ export async function playGenre(name) {
 			currentTrackList = null;
 			fadeAudioOut(activeAudio);
 			fadeAudioOut(inactiveAudio);
+			setCurrentTrackInfo(null);
 		}
 		pendingGenre = null;
 		return;
@@ -79,21 +104,25 @@ export async function playGenre(name) {
 	pendingGenre = null;
 	const myToken = ++pendingToken;
 
-	let urls = trackCache.get(trimmed);
-	if (!urls) {
-		urls = await fetchPreviewUrls(trimmed);
+	let tracks = trackCache.get(trimmed);
+	if (!tracks) {
+		tracks = await fetchPreviewTracks(trimmed);
 		if (myToken !== pendingToken) return;
-		trackCache.set(trimmed, urls);
+		// Only cache non-empty results so a transient empty fetch can be retried
+		if (tracks && tracks.length > 0) {
+			trackCache.set(trimmed, tracks);
+		}
 	}
 	if (myToken !== pendingToken) return;
-	if (!urls || urls.length === 0) return;
+	if (!tracks || tracks.length === 0) return;
 
-	currentTrackList = urls;
-	currentTrackIndex = Math.floor(Math.random() * urls.length);
-	playUrl(urls[currentTrackIndex]);
+	currentTrackList = tracks;
+	currentTrackIndex = Math.floor(Math.random() * tracks.length);
+	playRetryCount = 0;
+	playTrack(tracks[currentTrackIndex]);
 }
 
-async function fetchPreviewUrls(name) {
+async function fetchPreviewTracks(name) {
 	const tryNames = [];
 	tryNames.push(name);
 	const lastWord = name.split(/\s+/).filter(Boolean).pop();
@@ -110,10 +139,14 @@ async function fetchPreviewUrls(name) {
 			const res = await fetch(`${ITUNES_SEARCH_URL}?${params.toString()}`);
 			if (!res.ok) continue;
 			const json = await res.json();
-			const urls = (json.results || [])
-				.map((t) => t.previewUrl)
-				.filter(Boolean);
-			if (urls.length > 0) return urls;
+			const tracks = (json.results || [])
+				.filter((t) => t && t.previewUrl)
+				.map((t) => ({
+					url: t.previewUrl,
+					name: String(t.trackName || "").trim(),
+					artist: String(t.artistName || "").trim(),
+				}));
+			if (tracks.length > 0) return tracks;
 		} catch (e) {
 			console.warn("audio fetch failed for", term, e);
 		}
@@ -121,14 +154,25 @@ async function fetchPreviewUrls(name) {
 	return [];
 }
 
-function playUrl(url) {
-	if (!url || !inactiveAudio) return;
+function playTrack(track) {
+	if (!track || !track.url || !inactiveAudio) return;
 
-	inactiveAudio.src = url;
+	inactiveAudio.src = track.url;
 	inactiveAudio.volume = 0;
 	const playPromise = inactiveAudio.play();
-	if (playPromise && typeof playPromise.catch === "function") {
-		playPromise.catch((e) => console.warn("audio play blocked:", e));
+	if (playPromise && typeof playPromise.then === "function") {
+		playPromise.then(() => {
+			playRetryCount = 0;
+			setCurrentTrackInfo({ name: track.name, artist: track.artist });
+		}).catch((e) => {
+			console.warn("audio play failed:", e);
+			if (playRetryCount < MAX_PLAY_RETRIES) {
+				playRetryCount++;
+				playNextInList();
+			}
+		});
+	} else {
+		setCurrentTrackInfo({ name: track.name, artist: track.artist });
 	}
 
 	crossfadeBetween(activeAudio, inactiveAudio);
@@ -136,6 +180,11 @@ function playUrl(url) {
 }
 
 function crossfadeBetween(fromAudio, toAudio) {
+	// Cancel any in-flight crossfade so concurrent fades cannot fight each other
+	if (crossfadeRafId) {
+		cancelAnimationFrame(crossfadeRafId);
+		crossfadeRafId = null;
+	}
 	const startTime = performance.now();
 	const startFromVol = fromAudio ? fromAudio.volume : 0;
 
@@ -146,13 +195,14 @@ function crossfadeBetween(fromAudio, toAudio) {
 		if (toAudio) toAudio.volume = VOLUME * progress;
 
 		if (progress < 1) {
-			requestAnimationFrame(step);
+			crossfadeRafId = requestAnimationFrame(step);
 		} else {
+			crossfadeRafId = null;
 			if (fromAudio && !fromAudio.paused) fromAudio.pause();
 			if (fromAudio) fromAudio.volume = 0;
 		}
 	}
-	requestAnimationFrame(step);
+	crossfadeRafId = requestAnimationFrame(step);
 }
 
 function fadeAudioOut(audio) {
@@ -178,5 +228,5 @@ function fadeAudioOut(audio) {
 function playNextInList() {
 	if (!currentTrackList || currentTrackList.length === 0) return;
 	currentTrackIndex = (currentTrackIndex + 1) % currentTrackList.length;
-	playUrl(currentTrackList[currentTrackIndex]);
+	playTrack(currentTrackList[currentTrackIndex]);
 }
