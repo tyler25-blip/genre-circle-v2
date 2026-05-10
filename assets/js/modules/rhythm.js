@@ -54,33 +54,47 @@ function ensureRhythmGlowFilter() {
 	filter.setAttribute("width", "200%");
 	filter.setAttribute("height", "200%");
 
-	const blur = createSvgElement("feGaussianBlur");
-	blur.setAttribute("in", "SourceAlpha");
-	blur.setAttribute("stdDeviation", "20");
-	blur.setAttribute("result", "blur");
-	filter.appendChild(blur);
+	// Outer halo: wide soft blur
+	const blurOuter = createSvgElement("feGaussianBlur");
+	blurOuter.setAttribute("in", "SourceAlpha");
+	blurOuter.setAttribute("stdDeviation", "22");
+	blurOuter.setAttribute("result", "blurOuter");
+	filter.appendChild(blurOuter);
+
+	// Inner halo: tight blur for saturated core
+	const blurInner = createSvgElement("feGaussianBlur");
+	blurInner.setAttribute("in", "SourceAlpha");
+	blurInner.setAttribute("stdDeviation", "7");
+	blurInner.setAttribute("result", "blurInner");
+	filter.appendChild(blurInner);
 
 	const flood = createSvgElement("feFlood");
 	flood.setAttribute("id", "rhythm-glow-flood");
 	flood.setAttribute("flood-color", "#39ff14");
-	flood.setAttribute("flood-opacity", "0.7");
+	flood.setAttribute("flood-opacity", "1");
 	flood.setAttribute("result", "flood");
 	filter.appendChild(flood);
 
-	const composite = createSvgElement("feComposite");
-	composite.setAttribute("in", "flood");
-	composite.setAttribute("in2", "blur");
-	composite.setAttribute("operator", "in");
-	composite.setAttribute("result", "coloredBlur");
-	filter.appendChild(composite);
+	const compOuter = createSvgElement("feComposite");
+	compOuter.setAttribute("in", "flood");
+	compOuter.setAttribute("in2", "blurOuter");
+	compOuter.setAttribute("operator", "in");
+	compOuter.setAttribute("result", "haloOuter");
+	filter.appendChild(compOuter);
+
+	const compInner = createSvgElement("feComposite");
+	compInner.setAttribute("in", "flood");
+	compInner.setAttribute("in2", "blurInner");
+	compInner.setAttribute("operator", "in");
+	compInner.setAttribute("result", "haloInner");
+	filter.appendChild(compInner);
 
 	const merge = createSvgElement("feMerge");
-	const m1 = createSvgElement("feMergeNode");
-	m1.setAttribute("in", "coloredBlur");
-	const m2 = createSvgElement("feMergeNode");
-	m2.setAttribute("in", "SourceGraphic");
-	merge.appendChild(m1);
-	merge.appendChild(m2);
+	["haloOuter", "haloInner", "haloInner", "SourceGraphic"].forEach((src) => {
+		const node = createSvgElement("feMergeNode");
+		node.setAttribute("in", src);
+		merge.appendChild(node);
+	});
 	filter.appendChild(merge);
 
 	defs.appendChild(filter);

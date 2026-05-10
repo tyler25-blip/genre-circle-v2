@@ -862,7 +862,7 @@ let animating = false;
 let recomputeTimeoutId = null;
 let lastRecomputeTime = 0;
 let animationFrameCount = 0;
-const MAX_ANIMATION_FRAMES = 180;
+const MAX_ANIMATION_FRAMES = 540;
 
 function computeAndStartAnimation(placedItems, activeGenres, settings) {
 	placedItems.forEach((item) => {
@@ -909,28 +909,74 @@ function getSuperGenreAnchorPoint(superGenreId) {
 	return polarToCartesian(RING_CENTER.x, RING_CENTER.y, RING_RADIUS - 40, angle);
 }
 
+function computeTargetForItem(item, sgInfos) {
+	if (!sgInfos.length) return { x: RING_CENTER.x, y: RING_CENTER.y };
+
+	let sumX = 0;
+	let sumY = 0;
+	let sumW = 0;
+	sgInfos.forEach((sg) => {
+		let w = 0;
+		if (item._groupId === sg.id) {
+			w = Number(item._metrics?.entity_share) || Number(item.entity_share) || 0;
+		} else if (item._cooccurrenceMap) {
+			const rel = item._cooccurrenceMap.get(sg.name);
+			w = Number(rel?.entity_share) || 0;
+		}
+		sumW += w;
+		const angleRad = (sg.angle * Math.PI) / 180;
+		sumX += w * Math.cos(angleRad);
+		sumY += w * Math.sin(angleRad);
+	});
+
+	if (sumW < 0.001) return { x: RING_CENTER.x, y: RING_CENTER.y };
+
+	const dirMag = Math.hypot(sumX, sumY);
+	const dirX = dirMag > 0 ? sumX / dirMag : 0;
+	const dirY = dirMag > 0 ? sumY / dirMag : 0;
+	const meanW = sumW / sgInfos.length;
+
+	const TARGET_MIN_R = 50;
+	const TARGET_MAX_R = LABEL_RADIUS_INNER - 36;
+	// Soft non-linear scaling so weak weights still reach mid radii instead of clumping at center
+	const scaled = Math.min(1, Math.sqrt(Math.min(1, meanW * 4)));
+	const radius = TARGET_MIN_R + scaled * (TARGET_MAX_R - TARGET_MIN_R);
+
+	return {
+		x: RING_CENTER.x + dirX * radius,
+		y: RING_CENTER.y + dirY * radius,
+	};
+}
+
 function calculateNetworkForces(placedItems) {
 	const damping = 0.82;
-	const maxSpeed = 6;
-	const repulsionStrength = 550;
-	// Spring toward center: force = distance * k (Hooke's law).
-	// This is what makes dots fill the disk rather than forming a ring at the edge.
-	const centerSpringK = 0.005;
+	const maxSpeed = 8;
+	const repulsionStrength = 200;
+	const targetSpringK = 0.022;
+
+	const activeSuperGenres = getActiveSuperGenres();
+	const sgInfos = activeSuperGenres
+		.map((sg) => {
+			const name = getPrimaryGenreName(sg.id);
+			if (!name) return null;
+			const angle = getAnchorAngle(sg.id, ringLabels.length);
+			return { id: sg.id, name, angle };
+		})
+		.filter(Boolean);
 
 	const movable = placedItems.filter((item) => !isSuperGenreDot(item));
+
 	movable.forEach((item) => {
-		if (!item.velocity) {
-			item.velocity = { x: 0, y: 0 };
-		}
+		if (!item.velocity) item.velocity = { x: 0, y: 0 };
 		item.velocity.x *= damping;
 		item.velocity.y *= damping;
 
-		// Hooke spring toward center — balances repulsion to create disk-fill equilibrium
-		item.velocity.x += (RING_CENTER.x - item.current.x) * centerSpringK;
-		item.velocity.y += (RING_CENTER.y - item.current.y) * centerSpringK;
+		const target = computeTargetForItem(item, sgInfos);
+		item._target = target;
+		item.velocity.x += (target.x - item.current.x) * targetSpringK;
+		item.velocity.y += (target.y - item.current.y) * targetSpringK;
 	});
 
-	// Universal repulsion — every dot pushes every other dot away
 	for (let i = 0; i < movable.length; i++) {
 		for (let j = i + 1; j < movable.length; j++) {
 			const a = movable[i];
@@ -939,7 +985,7 @@ function calculateNetworkForces(placedItems) {
 			const dy = b.current.y - a.current.y;
 			const dist = Math.hypot(dx, dy) || 0.0001;
 			const minDist = (a.radius || 8) + (b.radius || 8) + 30;
-			if (dist < minDist * 3) {
+			if (dist < minDist * 2) {
 				const force = repulsionStrength / (dist * dist);
 				const fx = (dx / dist) * force;
 				const fy = (dy / dist) * force;
@@ -1159,7 +1205,9 @@ export function updateGenreDotPositions() {
 
 function detectAndResolveCollisions(items) {
 	const gap = getCollisionGap();
-	// simple spatial hash or brute force collision detection
+	// Resolve only a fraction of overlap per frame so the target spring
+	// physics is not overpowered by the position-snapping collision push.
+	const resolveFactor = 0.35;
 	for (let i = 0; i < items.length; i++) {
 		for (let j = i + 1; j < items.length; j++) {
 			const a = items[i];
@@ -1172,11 +1220,10 @@ function detectAndResolveCollisions(items) {
 			const dist = Math.hypot(dx, dy);
 			const minDist = a.radius + b.radius + gap;
 			if (dist < minDist && dist > 0.0001) {
-				// push apart
 				const overlap = minDist - dist;
 				const ux = dx / dist;
 				const uy = dy / dist;
-				const push = overlap / 2;
+				const push = (overlap / 2) * resolveFactor;
 				a.current.x -= ux * push;
 				a.current.y -= uy * push;
 				b.current.x += ux * push;
