@@ -1,7 +1,7 @@
 .ring-stroke {
 	fill: none;
 	stroke: var(--ring-color);
-	stroke-width: 64;
+	stroke-width: 56;
 }
 
 .genre-trees {

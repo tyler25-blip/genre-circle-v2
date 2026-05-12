@@ -2,9 +2,9 @@ export const SVG_NS = "http://www.w3.org/2000/svg";
 
 export const RING_CENTER = { x: 800, y: 800 };
 export const RING_RADIUS = 430;
-export const LABEL_RADIUS_SINGLE = 430;
-export const LABEL_RADIUS_OUTER = 443;
-export const LABEL_RADIUS_INNER = 417;
+export const LABEL_RADIUS_SINGLE = 436;
+export const LABEL_RADIUS_OUTER = 460;
+export const LABEL_RADIUS_INNER = 412;
 
 export const USER_DOT_RADIUS = 14;
 export const USERS = [
