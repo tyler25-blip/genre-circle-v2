@@ -1,0 +1,32 @@
+.stage {
+	width: min(92vw, 920px);
+	aspect-ratio: 1 / 1;
+	position: relative;
+}
+
+.genre-ring {
+	width: 100%;
+	height: 100%;
+	display: block;
+	overflow: visible;
+}
+
+.musicbrainz-status {
+	position: absolute;
+	left: 50%;
+	top: 50%;
+	transform: translate(-50%, -50%);
+	z-index: 2;
+	max-width: min(70%, 420px);
+	padding: 14px 18px;
+	border-radius: 14px;
+	background: rgba(8, 8, 8, 0.82);
+	backdrop-filter: blur(10px);
+	color: #ffffff;
+	text-align: center;
+	font-size: 14px;
+	line-height: 1.45;
+	letter-spacing: 0.2px;
+	box-shadow: 0 16px 40px rgba(0, 0, 0, 0.35);
+	pointer-events: none;
+}
