@@ -3,7 +3,7 @@ import { ringLabels } from "../data/genres.js";
 import { createSvgElement, polarToCartesian } from "../core/svg.js";
 import { getUsers, getSuperGenres } from "../core/state.js";
 import { getAnchorAngle } from "./bridges.js";
-import { computeCooccurrence } from "../data/musicbrainz/cooccurrence.js";
+import { computeCooccurrence, computeIntersectionCooccurrence } from "../data/musicbrainz/cooccurrence.js";
 
 let bridgeLayer = null;
 let connectionLinesLayer = null;
@@ -12,10 +12,14 @@ let lastSettingsKey = "";
 let pendingRunToken = 0;
 let preloadToken = 0;
 const preloadedBySettings = new Map();
+const preloadedIntersections = new Map(); // intersectionKey -> data
 const MAP_SETTINGS_KEY = "hcid_map_display_settings";
 const MB_SETTINGS_KEY = "hcid_mb_cooccurrence_settings";
 const LABEL_VISIBILITY_KEY = "hcid_genre_dot_label_visibility";
 let genreDotLabelVisibilityMode = "selected";
+
+// State tracking for bridge dots: dotElement -> { parentGenreIds: [id1, id2, ...], type: "direct" | "intersection" }
+const dotMetadata = new WeakMap();
 
 let activeCurvedDot = null;
 let curvedLabelRotation = 0;
@@ -30,13 +34,58 @@ function getDebugNode(id) {
 	return document.getElementById(id);
 }
 
+/**
+ * Mix two colors (hex format) by averaging their RGB values
+ * e.g., "#d64949" (red) + "#f1bf4c" (yellow) = greenish color
+ */
+function mixColors(color1, color2) {
+	const hex1 = color1.replace("#", "");
+	const hex2 = color2.replace("#", "");
+
+	const r1 = parseInt(hex1.substring(0, 2), 16);
+	const g1 = parseInt(hex1.substring(2, 4), 16);
+	const b1 = parseInt(hex1.substring(4, 6), 16);
+
+	const r2 = parseInt(hex2.substring(0, 2), 16);
+	const g2 = parseInt(hex2.substring(2, 4), 16);
+	const b2 = parseInt(hex2.substring(4, 6), 16);
+
+	const rMix = Math.round((r1 + r2) / 2);
+	const gMix = Math.round((g1 + g2) / 2);
+	const bMix = Math.round((b1 + b2) / 2);
+
+	return "#" + [rMix, gMix, bMix].map((x) => x.toString(16).padStart(2, "0")).join("");
+}
+
+/**
+ * Get the color for an intersection bridge
+ * For genres A and B, mix their user colors
+ */
+function getIntersectionColor(superGenreIdA, superGenreIdB, users) {
+	const superGenres = getSuperGenres();
+	const sgA = superGenres[superGenreIdA];
+	const sgB = superGenres[superGenreIdB];
+
+	let colorA = "#ffffff";
+	let colorB = "#ffffff";
+
+	if (sgA?.activeUserId !== null && sgA?.activeUserId !== undefined) {
+		colorA = users[sgA.activeUserId]?.color ?? "#ffffff";
+	}
+	if (sgB?.activeUserId !== null && sgB?.activeUserId !== undefined) {
+		colorB = users[sgB.activeUserId]?.color ?? "#ffffff";
+	}
+
+	return mixColors(colorA, colorB);
+}
+
 function clamp(value, min, max) {
 	return Math.max(min, Math.min(max, value));
 }
 
 function getCollisionGap() {
 	const gapNode = getDebugNode("map-collision-gap");
-	return clamp(Number(gapNode?.value || 28), 0, 100);
+	return clamp(Number(gapNode?.value || 100), 0, 100);
 }
 
 function getRadiusScalingType() {
@@ -49,7 +98,7 @@ function loadMapSettings() {
 		const raw = localStorage.getItem(MAP_SETTINGS_KEY);
 		if (raw) return JSON.parse(raw);
 	} catch {}
-	return { collisionGap: 28, radiusScaling: "connections", generationIterations: 1 };
+	return { collisionGap: 100, radiusScaling: "connections", generationIterations: 1 };
 }
 
 function saveMapSettings({ collisionGap, radiusScaling, generationIterations } = {}) {
@@ -122,13 +171,20 @@ function getBridgeSettings() {
 
 	const entityType = entityNode?.value || "release";
 	const maxEntities = clamp(Number(maxNode?.value || 300), 10, 2000);
-	const topN = clamp(Number(topNNode?.value || 12), 1, 40);
+	const topN = clamp(Number(topNNode?.value || 6), 1, 40);
+	// optional debug knobs (may not be in markup) for candidate pool and minimal support
+	const topKNode = getDebugNode("debug-topk");
+	const minSupportNode = getDebugNode("debug-minsupport");
+	const topK = clamp(Number(topKNode?.value || 100), 5, 200);
+	const min_support = clamp(Number(minSupportNode?.value || 1), 0, 100);
 	const generationIterations = clamp(Number(generationIterationsNode?.value || 1), 1, 20);
 
 	return {
 		entityType,
 		maxEntities,
 		topN,
+		topK,
+		min_support,
 		generationIterations,
 	};
 }
@@ -322,8 +378,8 @@ export function updateGenreDotLabelVisibility(selectedDotEl = null) {
  * - X% → weighted position between ring and halfway point
  */
 function getRandomPositionInsideRing() {
-	// Start near center; spring physics will spread dots outward to equilibrium
-	const maxR = 80;
+	// Spread initial positions widely so dots don't cluster at center
+	const maxR = 280;
 	const r = Math.sqrt(Math.random()) * maxR;
 	const a = Math.random() * Math.PI * 2;
 	return {
@@ -488,6 +544,11 @@ async function renderGroupForGenre(dataset, superGenre, settings, users, runToke
 	const sourceGenreName = getPrimaryGenreName(superGenre.id);
 	if (!sourceGenreName) return `<li><strong>unknown</strong>: ungültiges Super-Genre</li>`;
 
+	const existingGroup = bridgeLayer?.querySelector(`.supergenre-group[data-supergenre-id='${superGenre.id}']`);
+	if (existingGroup) {
+		return `<li><strong>${sourceGenreName}</strong>: bereits vorhanden</li>`;
+	}
+
 	const out = dataset.get(sourceGenreName);
 	if (!out) {
 		return `<li><strong>${sourceGenreName}</strong>: noch nicht vorab geladen</li>`;
@@ -514,6 +575,7 @@ async function renderGroupForGenre(dataset, superGenre, settings, users, runToke
 	group.setAttribute("data-supergenre-id", String(superGenre.id));
 
 	placed.forEach((item, idx) => {
+		item._groupId = superGenre.id;
 		// preserve the original metrics for later rescaling
 		item._metrics = {
 			count: scaled[idx].count,
@@ -542,6 +604,119 @@ async function renderGroupForGenre(dataset, superGenre, settings, users, runToke
 	}
 
 	return `<li><strong>${sourceGenreName}</strong>: ${placed.length} Top-Tags aus ${out.totalSampled} ${settings.entityType}s</li>`;
+}
+
+/**
+ * Render intersection/bridge genres for two active super-genres
+ * Shows the top genres that appear in the co-occurrence data of BOTH genres
+ */
+async function renderIntersectionGroupForGenres(superGenreA, superGenreB, settings, users, runToken) {
+	const sourceGenreNameA = getPrimaryGenreName(superGenreA.id);
+	const sourceGenreNameB = getPrimaryGenreName(superGenreB.id);
+
+	if (!sourceGenreNameA || !sourceGenreNameB) {
+		return `<li><strong>unknown</strong>: ungültige Super-Genres für Brücke</li>`;
+	}
+
+	const existingGroup = bridgeLayer?.querySelector(
+		`.intersection-group[data-supergenre-a='${superGenreA.id}'][data-supergenre-b='${superGenreB.id}']`
+	);
+	if (existingGroup) {
+		return `<li><strong>${sourceGenreNameA} ↔ ${sourceGenreNameB}</strong>: bereits vorhanden</li>`;
+	}
+
+	// Generate a unique key for this intersection pair (include relevant MB params)
+	const intersectionKey = `${sourceGenreNameA}|${sourceGenreNameB}|${settings.entityType}|${settings.maxEntities}|topK=${settings.topK||20}|min_support=${settings.min_support||1}|topN=${settings.topN}`;
+
+	// Check cache
+	let intersectionData = preloadedIntersections.get(intersectionKey);
+	if (!intersectionData) {
+		try {
+			intersectionData = await computeIntersectionCooccurrence(sourceGenreNameA, sourceGenreNameB, {
+				entityType: settings.entityType,
+				maxEntities: settings.maxEntities,
+				topK: settings.topK || 20,
+				min_support: settings.min_support || 1,
+				topN: settings.topN,
+			});
+			preloadedIntersections.set(intersectionKey, intersectionData);
+		} catch (error) {
+			return `<li><strong>${sourceGenreNameA} ↔ ${sourceGenreNameB}</strong>: Fehler (${String(error?.message || error)})</li>`;
+		}
+	}
+
+	const intersection = intersectionData?.intersection || [];
+	if (!intersection.length) {
+		return `<li><strong>${sourceGenreNameA} ↔ ${sourceGenreNameB}</strong>: Keine gemeinsamen Top-Genres</li>`;
+	}
+
+	// Mix colors from both user colors
+	const color = getIntersectionColor(superGenreA.id, superGenreB.id, users);
+
+	// Normalize intersection items to expected fields (count_avg, entity_share_avg, tag_share_avg)
+	const normalizedIntersection = intersection.map((item) => {
+		if (item.count_avg !== undefined) {
+			return { name: item.name, count_avg: item.count_avg, entity_share_avg: item.entity_share_avg, tag_share_avg: item.tag_share_avg };
+		}
+		if (item.count_joint !== undefined) {
+			return { name: item.name, count_avg: item.count_joint, entity_share_avg: item.entity_share, tag_share_avg: item.tag_share };
+		}
+		// fallback: combine count_a/count_b if present
+		if (item.count_a !== undefined && item.count_b !== undefined) {
+			return { name: item.name, count_avg: (item.count_a + item.count_b) / 2, entity_share_avg: (item.entity_share_a || 0 + item.entity_share_b || 0) / 2, tag_share_avg: 0 };
+		}
+		return { name: item.name, count_avg: item.count || 0, entity_share_avg: item.entity_share || 0, tag_share_avg: item.tag_share || 0 };
+	});
+
+	// Scale radii based on intersection metrics
+	const scaled = withScaledRadius(
+		normalizedIntersection.map((item) => ({
+			...item,
+			count: item.count_avg,
+			entity_share: item.entity_share_avg,
+			tag_share: item.tag_share_avg,
+		}))
+	);
+
+	// Place items randomly inside ring
+	const placed = scaled.map((item) => ({
+		...item,
+		position: getRandomPositionInsideRing(),
+		radius: item.radius || 8,
+	}));
+
+	// Create group for intersection
+	const group = createSvgElement("g");
+	group.setAttribute("class", "intersection-group");
+	group.setAttribute("data-supergenre-a", String(superGenreA.id));
+	group.setAttribute("data-supergenre-b", String(superGenreB.id));
+
+	placed.forEach((item, idx) => {
+		item._groupId = null; // intersection items don't have a single groupId
+		item._parentGenreIds = [superGenreA.id, superGenreB.id];
+		item._isIntersection = true;
+		item._metrics = {
+			count: scaled[idx].count,
+			entity_share: scaled[idx].entity_share,
+			tag_share: scaled[idx].tag_share,
+		};
+		const els = renderGenreDot(group, item, color);
+		item._el = els;
+		
+		// Track metadata for this dot
+		if (els.circle) {
+			dotMetadata.set(els.circle, { 
+				parentGenreIds: item._parentGenreIds, 
+				type: "intersection" 
+			});
+		}
+	});
+
+	group.__items = placed;
+	group.__parentGenreIds = [superGenreA.id, superGenreB.id];
+	bridgeLayer.appendChild(group);
+
+	return `<li><strong>${sourceGenreNameA} ↔ ${sourceGenreNameB}</strong>: ${placed.length} gemeinsame Top-Genres</li>`;
 }
 
 function withScaledRadius(items, minRadius = 4, maxRadius = 14) {
@@ -640,6 +815,7 @@ export async function updateCooccurrenceBridges({ forceRefresh = false } = {}) {
 	const activeSuperGenres = getActiveSuperGenres();
 	const activeKey = activeSuperGenres.map((superGenre) => superGenre.id).sort((a, b) => a - b).join(",");
 	const settingsKey = getSettingsKey(settings);
+	const shouldResetGroups = forceRefresh || settingsKey !== lastSettingsKey;
 
 	if (!forceRefresh && activeKey === lastActiveKey && settingsKey === lastSettingsKey) {
 		return;
@@ -648,7 +824,9 @@ export async function updateCooccurrenceBridges({ forceRefresh = false } = {}) {
 	lastActiveKey = activeKey;
 	lastSettingsKey = settingsKey;
 	const runToken = ++pendingRunToken;
-	bridgeLayer.replaceChildren();
+	if (shouldResetGroups) {
+		bridgeLayer.replaceChildren();
+	}
 	if (connectionLinesLayer) {
 		connectionLinesLayer.replaceChildren();
 	}
@@ -692,6 +870,30 @@ export async function updateCooccurrenceBridges({ forceRefresh = false } = {}) {
 		}
 	}
 
+	// Render intersection/bridge genres for all pairs of active super-genres
+	const activeSuperGenreIds = activeSuperGenres.map((sg) => sg.id);
+	for (let i = 0; i < activeSuperGenreIds.length; i++) {
+		for (let j = i + 1; j < activeSuperGenreIds.length; j++) {
+			if (runToken !== pendingRunToken) return;
+
+			const superGenreA = activeSuperGenres[i];
+			const superGenreB = activeSuperGenres[j];
+
+			try {
+				const chunk = await renderIntersectionGroupForGenres(superGenreA, superGenreB, settings, dots, runToken);
+				outputChunks.push(chunk);
+			} catch (error) {
+				const nameA = getPrimaryGenreName(superGenreA.id);
+				const nameB = getPrimaryGenreName(superGenreB.id);
+				outputChunks.push(`<li><strong>${nameA} ↔ ${nameB}</strong>: Fehler (${String(error?.message || error)})</li>`);
+			}
+		}
+	}
+
+	const allItems = getDisplayedItems();
+	bridgeLayer.__animatedItems = allItems;
+	computeAndStartAnimation(allItems, activeSuperGenres, settings);
+
 	if (!outputChunks.length) {
 		updateDebugOutput('<p class="muted">Keine Brücken-Dots mit den aktuellen Einstellungen gefunden.</p>');
 		return;
@@ -704,7 +906,7 @@ export async function updateCooccurrenceBridges({ forceRefresh = false } = {}) {
 function updateAllRadii() {
 	if (!bridgeLayer) return;
 
-	const groups = bridgeLayer.querySelectorAll('.supergenre-group');
+	const groups = bridgeLayer.querySelectorAll('.supergenre-group, .intersection-group');
 	groups.forEach((group) => {
 		const items = group.__items || [];
 		if (!items.length) return;
@@ -733,6 +935,35 @@ function updateAllRadii() {
 				oldItem._el.text.setAttribute('y', String(currentY + 4));
 			}
 		});
+	});
+}
+
+/**
+ * Called when a super-genre is deactivated.
+ * Removes all groups and dots related to this genre (both direct and intersection).
+ */
+export function onSuperGenreDeactivated(deactivatedSuperGenreId) {
+	if (!bridgeLayer) return;
+
+	// Remove direct group for this genre
+	const directGroup = bridgeLayer.querySelector(
+		`.supergenre-group[data-supergenre-id="${deactivatedSuperGenreId}"]`
+	);
+	if (directGroup && directGroup.parentNode) {
+		directGroup.parentNode.removeChild(directGroup);
+	}
+
+	// Remove all intersection groups that involve this genre
+	const intersectionGroups = Array.from(bridgeLayer.querySelectorAll('.intersection-group'));
+	intersectionGroups.forEach((group) => {
+		const genreA = Number(group.getAttribute('data-supergenre-a'));
+		const genreB = Number(group.getAttribute('data-supergenre-b'));
+
+		if (genreA === deactivatedSuperGenreId || genreB === deactivatedSuperGenreId) {
+			if (group.parentNode) {
+				group.parentNode.removeChild(group);
+			}
+		}
 	});
 }
 
@@ -874,7 +1105,14 @@ function computeAndStartAnimation(placedItems, activeGenres, settings) {
 		}
 	});
 
-	void loadCooccurrencesForGenreDots(placedItems, settings);
+	void loadCooccurrencesForGenreDots(placedItems, settings).then(() => {
+		// Restart animation after co-occurrence data loads so attraction forces take effect
+		animationFrameCount = Math.min(animationFrameCount, Math.floor(MAX_ANIMATION_FRAMES * 0.3));
+		if (!animating) {
+			animating = true;
+			requestAnimationFrame(stepAnimation);
+		}
+	});
 
 	if (!animating) {
 		animating = true;
@@ -936,10 +1174,11 @@ function computeTargetForItem(item, sgInfos) {
 	const dirY = dirMag > 0 ? sumY / dirMag : 0;
 	const meanW = sumW / sgInfos.length;
 
-	const TARGET_MIN_R = 50;
-	const TARGET_MAX_R = LABEL_RADIUS_INNER - 36;
-	// Soft non-linear scaling so weak weights still reach mid radii instead of clumping at center
-	const scaled = Math.min(1, Math.sqrt(Math.min(1, meanW * 4)));
+	const TARGET_MIN_R = 110;
+	const TARGET_MAX_R = LABEL_RADIUS_INNER - 110;
+	// Linear scaling: distance directly proportional to co-occurrence strength
+	// Math.sqrt helps spread the lower weights out more evenly
+	const scaled = Math.min(1, Math.sqrt(meanW * 3));
 	const radius = TARGET_MIN_R + scaled * (TARGET_MAX_R - TARGET_MIN_R);
 
 	return {
@@ -951,8 +1190,13 @@ function computeTargetForItem(item, sgInfos) {
 function calculateNetworkForces(placedItems) {
 	const damping = 0.82;
 	const maxSpeed = 8;
-	const repulsionStrength = 200;
-	const targetSpringK = 0.022;
+	const repulsionStrength = 350;
+	const targetSpringK = 0.03;
+	const attractionStrength = 1.5;
+	const sameGroupAttraction = 2.0;
+	const SIZE_THRESHOLD = 9; // midpoint of minRadius(4) and maxRadius(14)
+	const smallSmallAttraction = 0.8; // gentle pull between small nodes
+	const smallLargeRepulsion = 4.0; // push between small and large nodes
 
 	const activeSuperGenres = getActiveSuperGenres();
 	const sgInfos = activeSuperGenres
@@ -984,15 +1228,64 @@ function calculateNetworkForces(placedItems) {
 			const dx = b.current.x - a.current.x;
 			const dy = b.current.y - a.current.y;
 			const dist = Math.hypot(dx, dy) || 0.0001;
-			const minDist = (a.radius || 8) + (b.radius || 8) + 30;
-			if (dist < minDist * 2) {
-				const force = repulsionStrength / (dist * dist);
+			const minDist = (a.radius || 8) + (b.radius || 8) + 24;
+
+			// Check mutual co-occurrence strength
+			const aToB = a._cooccurrenceMap?.get(String(b.name || "").trim().toLowerCase());
+			const bToA = b._cooccurrenceMap?.get(String(a.name || "").trim().toLowerCase());
+			const coocStrength = Math.max(Number(aToB?.entity_share || 0), Number(bToA?.entity_share || 0));
+
+			// Reduce repulsion between genres that co-occur (up to 90% reduction)
+			const repulsionScale = 1 - clamp(coocStrength * 0.9, 0, 0.9);
+
+			// Same-group bonus: genres from the same Super Genre attract each other (spring-like)
+			const sameGroup = a._groupId !== undefined && a._groupId === b._groupId;
+			if (sameGroup && dist > minDist) {
+				const sgf = sameGroupAttraction * dist * 0.0001;
+				a.velocity.x += (dx / dist) * sgf;
+				a.velocity.y += (dy / dist) * sgf;
+				b.velocity.x -= (dx / dist) * sgf;
+				b.velocity.y -= (dy / dist) * sgf;
+			}
+
+			if (dist < minDist * 2.5) {
+				const force = (repulsionStrength * repulsionScale) / (dist * dist);
 				const fx = (dx / dist) * force;
 				const fy = (dy / dist) * force;
 				a.velocity.x -= fx;
 				a.velocity.y -= fy;
 				b.velocity.x += fx;
 				b.velocity.y += fy;
+			}
+
+			// Mutual attraction: co-occurring genres pull toward each other
+			if (coocStrength > 0.01) {
+				const af = coocStrength * attractionStrength;
+				const afx = (dx / dist) * af;
+				const afy = (dy / dist) * af;
+				a.velocity.x += afx;
+				a.velocity.y += afy;
+				b.velocity.x -= afx;
+				b.velocity.y -= afy;
+			}
+
+			// Size-dependent forces: small-small attract, small-large repel
+			const aSmall = (a.radius || 8) < SIZE_THRESHOLD;
+			const bSmall = (b.radius || 8) < SIZE_THRESHOLD;
+			if (aSmall && bSmall && dist > minDist && dist < minDist * 5) {
+				// Both small: gentle attraction to form clusters
+				const ssf = smallSmallAttraction / (dist * 0.5);
+				a.velocity.x += (dx / dist) * ssf;
+				a.velocity.y += (dy / dist) * ssf;
+				b.velocity.x -= (dx / dist) * ssf;
+				b.velocity.y -= (dy / dist) * ssf;
+			} else if (aSmall !== bSmall && dist < minDist * 4) {
+				// One small, one large: extra repulsion to push them apart
+				const slr = smallLargeRepulsion / (dist * dist) * 80;
+				a.velocity.x -= (dx / dist) * slr * (aSmall ? 1 : -1);
+				a.velocity.y -= (dy / dist) * slr * (aSmall ? 1 : -1);
+				b.velocity.x += (dx / dist) * slr * (aSmall ? 1 : -1);
+				b.velocity.y += (dy / dist) * slr * (aSmall ? 1 : -1);
 			}
 		}
 	}
@@ -1057,7 +1350,7 @@ function updateVisualPositions(items) {
 
 function getDisplayedItems() {
 	if (!bridgeLayer) return [];
-	const groups = bridgeLayer.querySelectorAll('.supergenre-group');
+	const groups = bridgeLayer.querySelectorAll('.supergenre-group, .intersection-group');
 	const all = [];
 	groups.forEach((g) => {
 		const items = g.__items || [];
@@ -1134,7 +1427,7 @@ export async function showGenresForSuperGenre(superGenreId) {
 	if (settings.generationIterations > 1) {
 		const ancestry = new Set([sourceGenreName]);
 		for (const item of placed) {
-			await renderNestedGeneration(group, item, settings, 2, settings.generationIterations, color, ancestry, pendingRunToken);
+			await renderNestedGeneration(group, item, settings, 2, settings.generationIterations, color, ancestry, runToken);
 		}
 	}
 }

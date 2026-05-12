@@ -9,7 +9,7 @@ import { setupSidebarMenu } from "./modules/sidebar.js";
 import { getUsers } from "./core/state.js";
 import { isPointInCircle } from "./utils/geometry.js";
 import { setupCooccurrenceBridges } from "./modules/cooccurrence-bridges.js";
-import { setupRhythmMode, showRhythmMode, hideRhythmMode } from "./modules/rhythm.js";
+import { setupRhythmMode, showRhythmMode, hideRhythmMode, setRhythmBPM } from "./modules/rhythm.js";
 import { setupAudioPlayer, setEnabled as setAudioEnabled, isEnabled as isAudioEnabled, playGenre as playGenreAudio } from "./modules/audioPlayer.js";
 
 async function init() {
@@ -48,6 +48,8 @@ async function init() {
 		if (rhythmBtn) rhythmBtn.classList.toggle("is-active", mode === "rhythm");
 	}
 
+	const bpmPanel = document.getElementById("bpm-control-panel");
+
 	function enterRhythmMode() {
 		if (currentMode === "rhythm") return;
 		currentMode = "rhythm";
@@ -57,6 +59,7 @@ async function init() {
 		if (curvedLabelLayer) curvedLabelLayer.style.display = "none";
 		const connLines = svg.querySelector(".cooccurrence-connection-lines");
 		if (connLines) connLines.style.display = "none";
+		if (bpmPanel) bpmPanel.style.display = "flex";
 		showRhythmMode(genreName);
 		setModeButtons("rhythm");
 	}
@@ -70,6 +73,7 @@ async function init() {
 		if (curvedLabelLayer) curvedLabelLayer.style.display = "";
 		const connLines = svg.querySelector(".cooccurrence-connection-lines");
 		if (connLines) connLines.style.display = "";
+		if (bpmPanel) bpmPanel.style.display = "none";
 		setModeButtons("map");
 	}
 
@@ -91,6 +95,17 @@ async function init() {
 				const cur = getCurrentActivatedGenreName();
 				if (cur) playGenreAudio(cur);
 			}
+		});
+	}
+
+	// BPM slider for rhythm mode
+	const bpmSlider = document.getElementById("rhythm-bpm");
+	const bpmValue = document.getElementById("rhythm-bpm-value");
+	if (bpmSlider) {
+		bpmSlider.addEventListener("input", () => {
+			const val = Number(bpmSlider.value) || 92;
+			setRhythmBPM(val);
+			if (bpmValue) bpmValue.textContent = String(val);
 		});
 	}
 

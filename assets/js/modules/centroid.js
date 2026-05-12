@@ -62,11 +62,7 @@ export function setupCentroid(svg, group) {
 	linesGroup.setAttribute("class", "centroid-lines");
 	centroidGroup.appendChild(linesGroup);
 
-	centroidNode = createSvgElement("circle");
-	centroidNode.setAttribute("class", "centroid-dot");
-	centroidNode.setAttribute("r", String(Math.max(4, USER_DOT_RADIUS - 2)));
-	centroidNode.style.display = "none";
-	centroidGroup.appendChild(centroidNode);
+	// Centroid dot removed — only lines remain, intersecting at the computed centroid position
 
 	// line from centroid to nearest genre-dot
 	// styled by centroid settings
@@ -117,7 +113,7 @@ export function notifyCentroidTargets(activeUserId = null) {
 		// remove all lines
 		userConnectionLines.clear();
 		if (linesGroup) linesGroup.replaceChildren();
-		if (centroidNode) centroidNode.style.display = "none";
+		// centroid dot removed — no display toggling needed
 		return;
 	}
 
@@ -165,13 +161,8 @@ function loop(ts) {
 	centroidState.cy += centroidState.vy * s;
 
 	// Update centroid node
-	if (centroidState.visible && centroidNode) {
-		centroidNode.style.display = "";
-		centroidNode.setAttribute("cx", String(centroidState.cx));
-		centroidNode.setAttribute("cy", String(centroidState.cy));
-	} else if (centroidNode) {
-		centroidNode.style.display = "none";
-	}
+	// centroidState position is still updated (used for line endpoints)
+	// but the visible dot has been removed
 
 	// Find and connect to nearest genre-dot
 	if (centroidState.visible) {
