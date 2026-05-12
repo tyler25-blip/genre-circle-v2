@@ -6,7 +6,7 @@ import { isPointInCircle, getSuperGenreAtAngle } from "../utils/geometry.js";
 import { updateHighlights } from "./highlights.js";
 import { updateLabels } from "./labels.js";
 import { notifyCentroidTargets } from "./centroid.js";
-import { showGenresForSuperGenre, hideGenresForSuperGenre, recomputeTargetsForAllDisplayed, updateGenreDotPositions } from "./cooccurrence-bridges.js";
+import { updateCooccurrenceBridges, onSuperGenreDeactivated } from "./cooccurrence-bridges.js";
 
 function getPosition(node) {
 	return {
@@ -125,12 +125,10 @@ export function setupDraggableUsers(svg, usersGroup) {
 			const superGenreId = getSuperGenreAtAngle(userPosition);
 			const prevActiveCount = getSuperGenres().filter((g) => g.active).length;
 			updateUserActiveSuperGenre(userId, superGenreId);
-			// show group's genres incrementally
-			showGenresForSuperGenre(superGenreId).then(() => {
-				updateGenreDotPositions();
-			});
+			// Regenerate all genres and bridges
+			void updateCooccurrenceBridges();
 			const newActiveCount = getSuperGenres().filter((g) => g.active).length;
-			if (newActiveCount !== prevActiveCount) recomputeTargetsForAllDisplayed();
+			if (newActiveCount !== prevActiveCount) notifyCentroidTargets();
 		} else if (wasInGenreRing && !nowInGenreRing) {
 			// Beim Verlassen: Super-Genre deaktivieren (nur wenn dieser User der Aktivator ist)
 			const prevUserState = getUser(userId);
@@ -138,11 +136,12 @@ export function setupDraggableUsers(svg, usersGroup) {
 			const prevActiveCount = getSuperGenres().filter((g) => g.active).length;
 			updateUserActiveSuperGenre(userId, null);
 			if (prevSuperGenreId !== null) {
-				hideGenresForSuperGenre(prevSuperGenreId);
-				updateGenreDotPositions();
+				// Remove groups for deactivated genre
+				onSuperGenreDeactivated(prevSuperGenreId);
+				void updateCooccurrenceBridges();
 			}
 			const newActiveCount = getSuperGenres().filter((g) => g.active).length;
-			if (newActiveCount !== prevActiveCount) recomputeTargetsForAllDisplayed();
+			if (newActiveCount !== prevActiveCount) notifyCentroidTargets();
 		}
 
 		// Highlights aktualisieren

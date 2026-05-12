@@ -316,11 +316,10 @@
 	font-weight: 500;
 }
 
-.rhythm-line {
-	stroke: #ffffff;
-	stroke-width: 5;
-	stroke-linecap: round;
-	opacity: 0.98;
+.rhythm-bubble {
+	stroke: none;
+	mix-blend-mode: screen;
+	pointer-events: none;
 }
 
 .mode-switch {
@@ -367,6 +366,7 @@
 
 /* Centroid visual: white dot and thin connecting lines to users inside the genre ring */
 .centroid-dot {
+	display: none;
 	fill: #ffffff;
 	stroke: none;
 }
@@ -381,6 +381,47 @@
 	stroke: #ffffff;
 	stroke-width: 2.5;
 	opacity: 0.95;
+}
+
+.bpm-control-panel {
+	position: fixed;
+	left: 24px;
+	bottom: 24px;
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	background: rgba(15, 15, 15, 0.85);
+	backdrop-filter: blur(10px);
+	border: 1px solid rgba(255, 255, 255, 0.15);
+	padding: 14px 18px;
+	border-radius: 12px;
+	color: #fff;
+	font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+	z-index: 1000;
+	box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+	animation: tree-fade-in 200ms ease-out;
+}
+
+.bpm-control-panel label {
+	font-size: 12px;
+	font-weight: 600;
+	letter-spacing: 0.5px;
+	color: var(--ring-color, #FF6B9D);
+	text-transform: uppercase;
+}
+
+.bpm-control-panel input[type="range"] {
+	width: 140px;
+	accent-color: var(--ring-color, #FF6B9D);
+	margin-top: 4px;
+}
+
+.bpm-control-panel #rhythm-bpm-value {
+	font-size: 13px;
+	font-weight: 500;
+	text-align: right;
+	margin-top: -24px;
+	pointer-events: none;
 }
 
 @keyframes tree-fade-in {

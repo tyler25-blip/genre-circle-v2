@@ -95,17 +95,20 @@
 							<option value="count">Count</option>
 							<option value="entity_share">Entity Share</option>
 							<option value="tag_share">Tag Share</option>
-							<option value="equal">Equal Size</option>
-						</select>
-					</div>
 					<div class="debug-row">
 						<label for="map-collision-gap">Collision Gap (px)</label>
-						<input id="map-collision-gap" class="debug-input" type="number" min="0" max="100" step="5" value="65" />
+						<input id="map-collision-gap" class="debug-input" type="number" min="0" max="100" step="5" value="100" />
 					</div>
 				</section>
 			</div>
 		</aside>
 
+		<!-- BPM Control for Rhythm Mode -->
+		<div id="bpm-control-panel" class="bpm-control-panel" style="display: none;">
+			<label for="rhythm-bpm">BPM</label>
+			<input id="rhythm-bpm" class="bpm-slider" type="range" min="40" max="200" step="1" value="92" />
+			<span id="rhythm-bpm-value">92</span>
+		</div>
 
 		<script type="module" src="assets/js/app.js"></script>
 	</body>
