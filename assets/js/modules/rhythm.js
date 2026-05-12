@@ -393,8 +393,13 @@ function animate(ts) {
 		const dist = Math.sqrt(dx * dx + dy * dy);
 		
 		// Prevent the bubble's visual edge from reaching the text ring
-		const outerLimit = TEXT_RADIUS - 50; 
-		const maxDist = outerLimit - b.baseRadius;
+		const outerLimit = TEXT_RADIUS - 30; // slightly relaxed
+		let maxDist = outerLimit - b.baseRadius;
+		
+		// Prevent impossible boundary conditions (oscillation to NaN)
+		if (maxDist < BUBBLE_SPAWN_INNER + 10) {
+			maxDist = BUBBLE_SPAWN_INNER + 10;
+		}
 
 		if (dist > maxDist) {
 			const force = (dist - maxDist) * 0.15; // stronger pushback
