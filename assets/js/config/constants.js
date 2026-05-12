@@ -9,6 +9,10 @@ export const LABEL_RADIUS_MULTI_L1_OUT = 428;
 export const LABEL_RADIUS_MULTI_L0_IN = 432;
 export const LABEL_RADIUS_MULTI_L1_IN = 400;
 
+export const LABEL_RADIUS_SINGLE = 430;
+export const LABEL_RADIUS_OUTER = 443;
+export const LABEL_RADIUS_INNER = 417;
+
 export const USER_DOT_RADIUS = 14;
 export const USERS = [
 	// red user: spawn 100px lower than before
