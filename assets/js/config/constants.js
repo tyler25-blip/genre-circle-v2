@@ -2,12 +2,12 @@ export const SVG_NS = "http://www.w3.org/2000/svg";
 
 export const RING_CENTER = { x: 800, y: 800 };
 export const RING_RADIUS = 430;
-export const LABEL_RADIUS_SINGLE_OUT = 444;
-export const LABEL_RADIUS_SINGLE_IN = 416;
-export const LABEL_RADIUS_MULTI_L0_OUT = 460;
+export const LABEL_RADIUS_SINGLE_OUT = 440;
+export const LABEL_RADIUS_SINGLE_IN = 420;
+export const LABEL_RADIUS_MULTI_L0_OUT = 452;
 export const LABEL_RADIUS_MULTI_L1_OUT = 428;
 export const LABEL_RADIUS_MULTI_L0_IN = 432;
-export const LABEL_RADIUS_MULTI_L1_IN = 400;
+export const LABEL_RADIUS_MULTI_L1_IN = 408;
 
 export const LABEL_RADIUS_SINGLE = 430;
 export const LABEL_RADIUS_OUTER = 443;
