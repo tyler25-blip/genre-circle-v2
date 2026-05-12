@@ -1,7 +1,10 @@
 import {
-	LABEL_RADIUS_INNER,
-	LABEL_RADIUS_OUTER,
-	LABEL_RADIUS_SINGLE,
+	LABEL_RADIUS_SINGLE_OUT,
+	LABEL_RADIUS_SINGLE_IN,
+	LABEL_RADIUS_MULTI_L0_OUT,
+	LABEL_RADIUS_MULTI_L1_OUT,
+	LABEL_RADIUS_MULTI_L0_IN,
+	LABEL_RADIUS_MULTI_L1_IN,
 	RING_CENTER,
 } from "../config/constants.js";
 import { ringLabels } from "../data/genres.js";
@@ -29,15 +32,15 @@ export function renderLabels(defs, labelsGroup) {
 			const isMultiLine = labelLines.length > 1;
 			const outwardRadius = isMultiLine
 				? lineIndex === 0
-					? LABEL_RADIUS_OUTER
-					: LABEL_RADIUS_INNER
-				: LABEL_RADIUS_SINGLE;
-			// On flip, swap the radii of the lines so reading order stays sensible
+					? LABEL_RADIUS_MULTI_L0_OUT
+					: LABEL_RADIUS_MULTI_L1_OUT
+				: LABEL_RADIUS_SINGLE_OUT;
+
 			const inwardRadius = isMultiLine
 				? lineIndex === 0
-					? LABEL_RADIUS_INNER
-					: LABEL_RADIUS_OUTER
-				: LABEL_RADIUS_SINGLE;
+					? LABEL_RADIUS_MULTI_L0_IN
+					: LABEL_RADIUS_MULTI_L1_IN
+				: LABEL_RADIUS_SINGLE_IN;
 
 			const outwardId = `genre-segment-${index}-line-${lineIndex}-out`;
 			const outwardPath = createSvgElement("path");
