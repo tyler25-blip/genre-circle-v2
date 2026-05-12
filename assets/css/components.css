@@ -1,7 +1,7 @@
 .ring-stroke {
 	fill: none;
 	stroke: var(--ring-color);
-	stroke-width: 56;
+	stroke-width: 80;
 }
 
 .genre-trees {
@@ -101,7 +101,7 @@
 	border: 1px solid rgba(255, 255, 255, 0.1);
 	color: #fff;
 	cursor: pointer;
-	font-size: 40px;
+	font-size: 20px;
 	display: flex;
 	align-items: center;
 	justify-content: center;
@@ -164,7 +164,7 @@
 
 .sidebar-section-title {
 	margin: 0;
-	font-size: 26px;
+	font-size: 13px;
 	font-weight: 900;
 	text-transform: uppercase;
 	letter-spacing: 0.8px;
@@ -175,7 +175,7 @@
 
 .sidebar-help {
 	margin: 0;
-	font-size: 24px;
+	font-size: 12px;
 	opacity: 0.75;
 	line-height: 1.4;
 	flex-shrink: 0;
@@ -189,7 +189,7 @@
 }
 
 .debug-row label {
-	font-size: 22px;
+	font-size: 11px;
 	opacity: 0.85;
 	font-weight: 900;
 	text-transform: capitalize;
@@ -202,7 +202,7 @@
 	border: 1px solid rgba(255, 255, 255, 0.2);
 	background: rgba(30, 30, 30, 0.8);
 	color: #fff;
-	font-size: 24px;
+	font-size: 12px;
 	font-family: inherit;
 	box-sizing: border-box;
 	transition: all 150ms ease-out;
@@ -239,7 +239,7 @@
 	color: #ffffff;
 	border: none;
 	cursor: pointer;
-	font-size: 24px;
+	font-size: 12px;
 	font-weight: 900;
 	text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
 	flex-shrink: 0;
@@ -260,7 +260,7 @@
 }
 
 .debug-results {
-	font-size: 24px;
+	font-size: 12px;
 	margin-top: 4px;
 	max-height: 200px;
 	overflow-y: auto;
@@ -268,7 +268,7 @@
 
 .debug-results .muted {
 	opacity: 0.7;
-	font-size: 22px;
+	font-size: 11px;
 	line-height: 1.4;
 }
 
@@ -280,7 +280,7 @@
 .debug-results li {
 	margin-bottom: 4px;
 	word-break: break-word;
-	font-size: 22px;
+	font-size: 11px;
 }
 
 .supergenre-group {
@@ -293,7 +293,7 @@
 
 .genre-dot-label {
 	fill: rgba(255, 255, 255, 0.96);
-	font-size: 20px;
+	font-size: 10px;
 	font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
 	letter-spacing: 0.2px;
 	paint-order: stroke;
@@ -303,14 +303,14 @@
 
 .genre-dot-curved-label {
 	fill: #ffffff;
-	font-size: 16px;
+	font-size: 8px;
 	font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
 	letter-spacing: 0.4px;
 }
 
 .rhythm-curved-label {
 	fill: #ffffff;
-	font-size: 40px;
+	font-size: 20px;
 	font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
 	letter-spacing: 0.6px;
 	font-weight: 900;
@@ -334,7 +334,7 @@
 .mode-btn {
 	padding: 10px 18px;
 	font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
-	font-size: 26px;
+	font-size: 13px;
 	font-weight: 900;
 	letter-spacing: 0.5px;
 	text-transform: uppercase;
@@ -359,7 +359,7 @@
 }
 
 .music-btn {
-	font-size: 32px;
+	font-size: 16px;
 	padding: 10px 14px;
 	min-width: 44px;
 }
@@ -403,7 +403,7 @@
 }
 
 .bpm-control-panel label {
-	font-size: 24px;
+	font-size: 12px;
 	font-weight: 900;
 	letter-spacing: 0.5px;
 	color: var(--ring-color, #FF6B9D);
@@ -417,7 +417,7 @@
 }
 
 .bpm-control-panel #rhythm-bpm-value {
-	font-size: 26px;
+	font-size: 13px;
 	font-weight: 900;
 	text-align: right;
 	margin-top: -24px;
