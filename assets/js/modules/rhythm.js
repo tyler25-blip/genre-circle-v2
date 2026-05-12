@@ -4,113 +4,160 @@ import { setTrackChangeListener, getCurrentTrack } from "./audioPlayer.js";
 
 const RING_INNER_EDGE = RING_RADIUS - 28;
 const TEXT_RADIUS = RING_INNER_EDGE - 16;
-const LINE_COUNT = 64;
-const LINE_OUTER_RADIUS = TEXT_RADIUS - 28;
-const LINE_BASE_LENGTH = 60;
-const LINE_MAX_LENGTH = 220;
 const TEXT_FONT_SIZE = 20;
 const CHAR_WIDTH_FACTOR = 0.58;
 const SEPARATOR = " · ";
 const ROTATION_SPEED = 0.18;
-const BPM = 92;
-const BEAT_PERIOD = 60 / BPM;
-const lineOffsets = Array.from({ length: LINE_COUNT }, () => Math.random() * Math.PI * 2);
-const lineFreqs = Array.from({ length: LINE_COUNT }, () => 0.7 + Math.random() * 1.4);
 
-const NEON_COLORS = [
-	[57, 255, 20],   // green  #39ff14
-	[0, 212, 255],   // blue   #00d4ff
-	[250, 255, 0],   // yellow #faff00
-	[255, 7, 58],    // red    #ff073a
-];
-const COLOR_HOLD_SECONDS = 10;
+// ── BPM & beat ──
+let bpm = 92;
+let beatPeriod = 60 / bpm;
 
-function pseudoRandom(seed) {
-	const x = Math.sin(seed * 12.9898) * 43758.5453;
-	return x - Math.floor(x);
+export function setRhythmBPM(newBpm) {
+	bpm = Math.max(30, Math.min(300, Number(newBpm) || 92));
+	beatPeriod = 60 / bpm;
 }
 
-function getCurrentLineColor(t) {
-	const total = NEON_COLORS.length * COLOR_HOLD_SECONDS;
-	const phase = ((t % total) + total) % total;
-	const idx = Math.floor(phase / COLOR_HOLD_SECONDS);
-	const local = (phase % COLOR_HOLD_SECONDS) / COLOR_HOLD_SECONDS;
-	const a = NEON_COLORS[idx];
-	const b = NEON_COLORS[(idx + 1) % NEON_COLORS.length];
-	const r = Math.round(a[0] * (1 - local) + b[0] * local);
-	const g = Math.round(a[1] * (1 - local) + b[1] * local);
-	const bl = Math.round(a[2] * (1 - local) + b[2] * local);
-	return `rgb(${r},${g},${bl})`;
+export function getRhythmBPM() {
+	return bpm;
 }
 
-function ensureRhythmGlowFilter() {
+// ── Bubble parameters ──
+const BUBBLE_SPAWN_RADIUS = TEXT_RADIUS - 60;       // spawn area outer boundary
+const BUBBLE_SPAWN_INNER = 40;                       // spawn area inner boundary
+// ── Gradients & Filters ──
+function ensureRhythmGradients() {
 	const defs = document.getElementById("ring-defs");
 	if (!defs) return;
-	if (defs.querySelector("#rhythm-glow")) return;
+	if (defs.querySelector("#bubble-grad-blue-1")) return;
 
+	// Helper to create radial gradients
+	const makeGrad = (id, c1, c2, c3) => {
+		const g = createSvgElement("radialGradient");
+		g.setAttribute("id", id);
+		g.innerHTML = `
+			<stop offset="0%" stop-color="${c1}" stop-opacity="0.5" />
+			<stop offset="55%" stop-color="${c2}" stop-opacity="0.7" />
+			<stop offset="100%" stop-color="${c3}" stop-opacity="1" />
+		`;
+		defs.appendChild(g);
+	};
+
+	// Theme Blue Variants (brighter & more saturated)
+	makeGrad("bubble-grad-blue-1", "#22ffff", "#00e0ff", "#00c8ff");
+	makeGrad("bubble-grad-blue-2", "#33eeff", "#0099ff", "#0066ff");
+	makeGrad("bubble-grad-blue-3", "#99ffff", "#00ccff", "#0055ff");
+
+	// Theme Purple Variants (brighter & more saturated)
+	makeGrad("bubble-grad-purple-1", "#e8d0ff", "#a855f7", "#9333ea");
+	makeGrad("bubble-grad-purple-2", "#f0e0ff", "#c77dff", "#7c3aed");
+	makeGrad("bubble-grad-purple-3", "#e8b8ff", "#a020f0", "#6d28d9");
+
+	// Ambient Glow Gradient (soft center glow)
+	const glowGrad = createSvgElement("radialGradient");
+	glowGrad.setAttribute("id", "bubble-ambient-glow");
+	glowGrad.innerHTML = `
+		<stop offset="0%" stop-color="currentColor" stop-opacity="0.15" />
+		<stop offset="70%" stop-color="currentColor" stop-opacity="0.05" />
+		<stop offset="100%" stop-color="currentColor" stop-opacity="0" />
+	`;
+	defs.appendChild(glowGrad);
+
+	// Super Blur Filter (slightly reduced for small bubble visibility)
 	const filter = createSvgElement("filter");
-	filter.setAttribute("id", "rhythm-glow");
+	filter.setAttribute("id", "bubble-super-blur");
 	filter.setAttribute("x", "-50%");
 	filter.setAttribute("y", "-50%");
 	filter.setAttribute("width", "200%");
 	filter.setAttribute("height", "200%");
-
-	// Outer halo: wide soft blur
-	const blurOuter = createSvgElement("feGaussianBlur");
-	blurOuter.setAttribute("in", "SourceAlpha");
-	blurOuter.setAttribute("stdDeviation", "22");
-	blurOuter.setAttribute("result", "blurOuter");
-	filter.appendChild(blurOuter);
-
-	// Inner halo: tight blur for saturated core
-	const blurInner = createSvgElement("feGaussianBlur");
-	blurInner.setAttribute("in", "SourceAlpha");
-	blurInner.setAttribute("stdDeviation", "7");
-	blurInner.setAttribute("result", "blurInner");
-	filter.appendChild(blurInner);
-
-	const flood = createSvgElement("feFlood");
-	flood.setAttribute("id", "rhythm-glow-flood");
-	flood.setAttribute("flood-color", "#39ff14");
-	flood.setAttribute("flood-opacity", "1");
-	flood.setAttribute("result", "flood");
-	filter.appendChild(flood);
-
-	const compOuter = createSvgElement("feComposite");
-	compOuter.setAttribute("in", "flood");
-	compOuter.setAttribute("in2", "blurOuter");
-	compOuter.setAttribute("operator", "in");
-	compOuter.setAttribute("result", "haloOuter");
-	filter.appendChild(compOuter);
-
-	const compInner = createSvgElement("feComposite");
-	compInner.setAttribute("in", "flood");
-	compInner.setAttribute("in2", "blurInner");
-	compInner.setAttribute("operator", "in");
-	compInner.setAttribute("result", "haloInner");
-	filter.appendChild(compInner);
-
-	const merge = createSvgElement("feMerge");
-	["haloOuter", "haloInner", "haloInner", "SourceGraphic"].forEach((src) => {
-		const node = createSvgElement("feMergeNode");
-		node.setAttribute("in", src);
-		merge.appendChild(node);
-	});
-	filter.appendChild(merge);
-
+	filter.innerHTML = `<feGaussianBlur in="SourceGraphic" stdDeviation="20" />`;
 	defs.appendChild(filter);
 }
 
+// ── State ──
 let rhythmLayer = null;
 let charNodes = [];
-let lineNodes = [];
+let bubbles = [];           // persistent bubble objects
+let bubbleGroup = null;
 let currentGenreName = "";
 let currentTrackInfo = null;
 let active = false;
 let rotation = 0;
 let startTime = 0;
 let rafId = null;
+let globalBeatPhase = 0;
+let lastAnimTime = 0;
 
+// ── Persistent breathing bubble ──
+class Bubble {
+	constructor(parentGroup, cx, cy, baseRadius, phaseOffset, breathSpeed, gradientId) {
+		this.cx = cx;
+		this.cy = cy;
+		this.baseRadius = baseRadius;
+		this.phaseOffset = phaseOffset;
+		this.breathSpeed = breathSpeed;
+
+		this.element = createSvgElement("circle");
+		this.element.setAttribute("class", "rhythm-bubble");
+		this.element.setAttribute("cx", String(cx));
+		this.element.setAttribute("cy", String(cy));
+		this.element.setAttribute("r", String(baseRadius));
+		this.element.setAttribute("fill", `url(#${gradientId})`);
+		this.element.setAttribute("opacity", "0.95");
+		parentGroup.appendChild(this.element);
+	}
+
+	update(phase, t) {
+		// Calculate progress within current beat
+		const localPhase = phase % 1.0; 
+
+		// Punch effect: 
+		let punch = 0;
+		if (localPhase < 0.05) {
+			// Extremely rapid contraction
+			punch = localPhase / 0.05;
+		} else {
+			// Super fast elastic expansion
+			const p = (localPhase - 0.05) / 0.95;
+			punch = Math.exp(-p * 30) * Math.cos(p * Math.PI * 2);
+		}
+
+		// The stronger the breathSpeed, the harder it punches
+		// Reduced amplitude for faster, subtler tremor
+		const punchIntensity = 0.2 * this.breathSpeed; 
+		const radiusScale = 1 - (punch * punchIntensity);
+
+		// Faster organic drift
+		const organicDrift = Math.sin(t * 1.8 + this.phaseOffset * 10) * 0.15;
+		
+		const currentRadius = this.baseRadius * (radiusScale + organicDrift);
+		
+		// Slight jitter during the peak of the punch
+		let jitterX = 0;
+		let jitterY = 0;
+		if (punch > 0.3) {
+			jitterX = (Math.random() - 0.5) * 8 * punch;
+			jitterY = (Math.random() - 0.5) * 8 * punch;
+		}
+
+		this.element.setAttribute("cx", String(this.cx + jitterX));
+		this.element.setAttribute("cy", String(this.cy + jitterY));
+		this.element.setAttribute("r", String(Math.max(1, currentRadius)));
+		
+		// Opacity flashes
+		const baseOpacity = 0.85;
+		const flash = punch * 0.2;
+		this.element.setAttribute("opacity", String(Math.max(0.4, Math.min(1, baseOpacity + flash))));
+	}
+
+	remove() {
+		if (this.element.parentNode) {
+			this.element.parentNode.removeChild(this.element);
+		}
+	}
+}
+
+// ── Label helpers ──
 function buildLabelText() {
 	const parts = [];
 	if (currentGenreName) parts.push(currentGenreName);
@@ -119,6 +166,7 @@ function buildLabelText() {
 	return parts.join(" · ");
 }
 
+// ── Lifecycle ──
 export function setupRhythmMode(svg) {
 	if (rhythmLayer) return;
 	rhythmLayer = createSvgElement("g");
@@ -156,14 +204,17 @@ export function hideRhythmMode() {
 	rhythmLayer.setAttribute("visibility", "hidden");
 	rhythmLayer.replaceChildren();
 	charNodes = [];
-	lineNodes = [];
+	bubbles.forEach((b) => b.remove());
+	bubbles = [];
+	bubbleGroup = null;
 }
 
 function rebuildContents() {
 	if (!rhythmLayer) return;
 	rhythmLayer.replaceChildren();
 	charNodes = [];
-	lineNodes = [];
+	bubbles.forEach((b) => b.remove());
+	bubbles = [];
 
 	const labelText = buildLabelText();
 	if (!labelText) return;
@@ -186,29 +237,105 @@ function rebuildContents() {
 		charNodes.push(node);
 	}
 
-	// Wrap all lines in a sub-group with the colored glow filter
-	ensureRhythmGlowFilter();
-	const linesSubGroup = createSvgElement("g");
-	linesSubGroup.setAttribute("class", "rhythm-lines-group");
-	linesSubGroup.setAttribute("filter", "url(#rhythm-glow)");
-	rhythmLayer.appendChild(linesSubGroup);
+	// Bubbles group
+	ensureRhythmGradients();
+	bubbleGroup = createSvgElement("g");
+	bubbleGroup.setAttribute("class", "rhythm-bubbles-group");
+	bubbleGroup.setAttribute("filter", "url(#bubble-super-blur)");
+	rhythmLayer.appendChild(bubbleGroup);
 
-	for (let i = 0; i < LINE_COUNT; i++) {
-		const line = createSvgElement("line");
-		line.setAttribute("class", "rhythm-line");
-		line.setAttribute("stroke-linecap", "round");
-		linesSubGroup.appendChild(line);
-		lineNodes.push(line);
+	// Create persistent bubbles evenly distributed across angles
+	// 3 large, 4 medium, 7 small (14 total)
+	const tiers = [
+		...Array(3).fill({ type: 'large', min: 100, max: 130 }), 
+		...Array(4).fill({ type: 'medium', min: 40, max: 60 }), 
+		...Array(7).fill({ type: 'small', min: 18, max: 30 })   
+	];
+
+	// Pick ONE primary color theme (blue or purple only)
+	const themeRoll = Math.random();
+	let themePrefix = "bubble-grad-blue";
+	let ambientColor = "#00ccff";
+	if (themeRoll > 0.5) {
+		themePrefix = "bubble-grad-purple";
+		ambientColor = "#a855f7";
+	}
+
+	// Add ambient glow layer behind everything (uses radial gradient for natural falloff)
+	const ambientGlow = createSvgElement("circle");
+	ambientGlow.setAttribute("cx", String(RING_CENTER.x));
+	ambientGlow.setAttribute("cy", String(RING_CENTER.y));
+	ambientGlow.setAttribute("r", String(BUBBLE_SPAWN_RADIUS * 1.1));
+	ambientGlow.setAttribute("fill", `url(#bubble-ambient-glow)`);
+	ambientGlow.style.color = ambientColor;
+	ambientGlow.setAttribute("opacity", "1");
+	bubbleGroup.appendChild(ambientGlow);
+
+	let largeCount = 0;
+	let othersCount = 0;
+	const totalOthers = 11; // 4 medium + 7 small
+	const largeBaseOffset = Math.random() * Math.PI * 2; // Fixed rotation for the triangle of large bubbles
+
+	for (let i = 0; i < tiers.length; i++) {
+		const tier = tiers[i];
+		let angle;
+
+		if (tier.type === 'large') {
+			// Lock large bubbles to be exactly 120 degrees apart
+			angle = largeBaseOffset + (largeCount * (Math.PI * 2) / 3);
+			largeCount++;
+		} else {
+			// Distribute others evenly in the remaining space with slight jitter
+			const angleSlice = (Math.PI * 2) / totalOthers;
+			angle = (othersCount * angleSlice) + ((Math.random() - 0.5) * angleSlice * 0.8);
+			othersCount++;
+		}
+
+		// Force a wider spread on radius
+		// Large bubbles: force them to different radial bands (inner/mid/outer)
+		let r;
+		if (tier.type === 'large') {
+			// Each large bubble gets its own radial band
+			const bandIndex = largeCount - 1; // 0, 1, 2
+			const totalBands = 3;
+			const bandSize = (BUBBLE_SPAWN_RADIUS - BUBBLE_SPAWN_INNER) / totalBands;
+			r = BUBBLE_SPAWN_INNER + bandIndex * bandSize + Math.random() * bandSize;
+		} else {
+			const isOuter = i % 2 === 0;
+			const rSpan = (BUBBLE_SPAWN_RADIUS - BUBBLE_SPAWN_INNER) / 2;
+			const rBase = isOuter ? (BUBBLE_SPAWN_INNER + rSpan) : BUBBLE_SPAWN_INNER;
+			r = rBase + Math.random() * rSpan;
+		}
+
+		const cx = RING_CENTER.x + Math.cos(angle) * r;
+		const cy = RING_CENTER.y + Math.sin(angle) * r;
+
+		const baseRadius = tier.min + Math.random() * (tier.max - tier.min);
+
+		const phaseOffset = Math.random(); 
+		const breathSpeed = 0.8 + Math.random() * 0.5; // faster baseline
+		
+		// Randomly pick one of the 3 gradient variants for this theme
+		const variant = Math.floor(Math.random() * 3) + 1;
+		const gradientId = `${themePrefix}-${variant}`;
+
+		const bubble = new Bubble(bubbleGroup, cx, cy, baseRadius, phaseOffset, breathSpeed, gradientId);
+		bubbles.push(bubble);
 	}
 }
 
-function animate() {
+// ── Animation loop ──
+function animate(ts) {
 	if (!active) return;
 
-	const now = performance.now();
+	const now = ts || performance.now();
 	const t = (now - startTime) / 1000;
+	const dt = lastAnimTime > 0 ? Math.min(0.05, (now - lastAnimTime) / 1000) : 0.016;
+	lastAnimTime = now;
 
-	// Rotate the curved label
+	globalBeatPhase += dt / beatPeriod;
+
+	// ── Rotate curved label ──
 	rotation = (rotation + ROTATION_SPEED) % 360;
 	const rotRad = (rotation * Math.PI) / 180;
 
@@ -228,36 +355,55 @@ function animate() {
 		}
 	}
 
-	const beatPhase = (t / BEAT_PERIOD) % 1;
-	const beatPulse = Math.pow(1 - beatPhase, 2);
-	const beatIndex = Math.floor(t / BEAT_PERIOD);
-	const beatStrength = 0.65 + 0.7 * pseudoRandom(beatIndex);
+	// ── Physics Repulsion for Bubbles ──
+	for (let i = 0; i < bubbles.length; i++) {
+		for (let j = i + 1; j < bubbles.length; j++) {
+			const b1 = bubbles[i];
+			const b2 = bubbles[j];
+			const dx = b2.cx - b1.cx;
+			const dy = b2.cy - b1.cy;
+			const dist = Math.sqrt(dx * dx + dy * dy);
+			// Use full radius sum as minimum distance (no overlap allowed)
+			const minDist = (b1.baseRadius + b2.baseRadius) * 1.0;
+			
+			if (dist > 0 && dist < minDist) {
+				const force = (minDist - dist) * 0.15; 
+				const fx = (dx / dist) * force;
+				const fy = (dy / dist) * force;
+				
+				// Push inversely proportional to size area
+				const area1 = b1.baseRadius * b1.baseRadius;
+				const area2 = b2.baseRadius * b2.baseRadius;
+				const totalArea = area1 + area2;
+				const mass1 = area1 / totalArea;
+				const mass2 = area2 / totalArea;
 
-	const lineColor = getCurrentLineColor(t);
-	const flood = document.getElementById("rhythm-glow-flood");
-	if (flood) flood.setAttribute("flood-color", lineColor);
-
-	for (let i = 0; i < lineNodes.length; i++) {
-		const angleRad = (i / LINE_COUNT) * Math.PI * 2 - Math.PI / 2;
-		const noise =
-			Math.sin(t * 1.4 + lineOffsets[i]) * 0.32 +
-			Math.sin(t * 2.6 * lineFreqs[i] + lineOffsets[i] * 1.3) * 0.22 +
-			Math.sin(t * 4.1 + lineOffsets[i] * 0.6) * 0.14;
-		const level = beatPulse * beatStrength * 0.55 + (noise + 0.5) * 0.45;
-		const length = LINE_BASE_LENGTH + level * LINE_MAX_LENGTH;
-
-		const x1 = RING_CENTER.x + LINE_OUTER_RADIUS * Math.cos(angleRad);
-		const y1 = RING_CENTER.y + LINE_OUTER_RADIUS * Math.sin(angleRad);
-		const innerR = Math.max(20, LINE_OUTER_RADIUS - length);
-		const x2 = RING_CENTER.x + innerR * Math.cos(angleRad);
-		const y2 = RING_CENTER.y + innerR * Math.sin(angleRad);
-
-		const line = lineNodes[i];
-		line.setAttribute("x1", String(x1));
-		line.setAttribute("y1", String(y1));
-		line.setAttribute("x2", String(x2));
-		line.setAttribute("y2", String(y2));
+				b1.cx -= fx * mass2;
+				b1.cy -= fy * mass2;
+				b2.cx += fx * mass1;
+				b2.cy += fy * mass1;
+			}
+		}
 	}
+
+	// ── Update all breathing bubbles with Boundary Force ──
+	bubbles.forEach((b) => {
+		const dx = b.cx - RING_CENTER.x;
+		const dy = b.cy - RING_CENTER.y;
+		const dist = Math.sqrt(dx * dx + dy * dy);
+		
+		if (dist > BUBBLE_SPAWN_RADIUS) {
+			const force = (dist - BUBBLE_SPAWN_RADIUS) * 0.05;
+			b.cx -= (dx / dist) * force;
+			b.cy -= (dy / dist) * force;
+		} else if (dist < BUBBLE_SPAWN_INNER && dist > 0) {
+			const force = (BUBBLE_SPAWN_INNER - dist) * 0.05;
+			b.cx += (dx / dist) * force;
+			b.cy += (dy / dist) * force;
+		}
+
+		b.update(globalBeatPhase, t);
+	});
 
 	rafId = requestAnimationFrame(animate);
 }
